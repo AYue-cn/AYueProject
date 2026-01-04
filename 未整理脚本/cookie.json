@@ -1,0 +1,18 @@
+[
+  {
+    "name": "ft",
+    "value": "%7B%22ft%22%3A%2220%22%2C%22lh%22%3A%2240%22%2C%22mb%22%3A%2230%22%7D",
+    "domain": "110.40.165.17",
+    "path": "/",
+    "secure": false,
+    "httpOnly": false
+  },
+  {
+    "name": "SDK",
+    "value": "QFYDCFA7D73E9492F35A4F829B",
+    "domain": "110.40.165.17",
+    "path": "/",
+    "secure": false,
+    "httpOnly": false
+  }
+]
