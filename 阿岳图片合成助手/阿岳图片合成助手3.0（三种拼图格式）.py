@@ -173,10 +173,10 @@ class ImageCompositeGUI(ctk.CTk):
         watermark_frame = ctk.CTkFrame(self.tab_grid, fg_color="transparent")
         watermark_frame.pack(pady=10, padx=20, fill="x")
 
-        # 标题
+        # 标题（更新空值提示）
         ctk.CTkLabel(
             watermark_frame,
-            text="三、水印参数设置（每张图片独立左上角水印，默认100号字号）",
+            text="三、水印参数设置（每张图片独立左上角水印，默认100号字号，留空则不加水印）",
             font=ctk.CTkFont(size=14, weight="bold")
         ).grid(row=0, column=0, columnspan=4, pady=5, sticky="w")
 
@@ -201,10 +201,10 @@ class ImageCompositeGUI(ctk.CTk):
         self.watermark_color_entry.insert(0, "255,0,0")
         self.watermark_color_entry.grid(row=2, column=3, padx=5, pady=5)
 
-        # 提示信息
+        # 提示信息（更新空值逻辑说明）
         ctk.CTkLabel(
             watermark_frame,
-            text="提示：使用本地字体msyhbd.ttc（微软雅黑粗体），无需依赖系统字体，确保中文无乱码",
+            text="提示：使用本地字体msyhbd.ttc（微软雅黑粗体），无需依赖系统字体；水印文字留空则不添加任何水印",
             font=ctk.CTkFont(size=10),
             text_color="#666666"
         ).grid(row=3, column=0, columnspan=4, pady=2, sticky="w")
@@ -289,7 +289,7 @@ class ImageCompositeGUI(ctk.CTk):
         self.result_label.pack(pady=5)
 
     def _add_image(self):
-        """添加图片，自动提取无扩展名文件名作为默认水印名称"""
+        """添加图片，自动提取无扩展名文件名作为默认水印名称（用户可删除留空）"""
         if len(self.image_paths) >= 9:
             messagebox.showwarning("警告", "最多只能添加9张图片！")
             return
@@ -328,19 +328,19 @@ class ImageCompositeGUI(ctk.CTk):
             width=250
         ).pack(side="left", padx=5)
 
-        # 水印名称输入框（填充无扩展名文件名）
-        name_entry = ctk.CTkEntry(img_frame, width=150, placeholder_text="输入水印名称（支持中文）")
+        # 水印名称输入框（填充无扩展名文件名，用户可删除留空）
+        name_entry = ctk.CTkEntry(img_frame, width=150, placeholder_text="输入水印名称（留空则不加水印）")
         name_entry.insert(0, default_img_name)
         name_entry.pack(side="left", padx=5)
 
-        # 绑定修改事件（强制UTF-8编码）
+        # 绑定修改事件（强制UTF-8编码，留空则存储空字符串）
         def _update_img_name(event, idx=len(self.image_paths) - 1):
             try:
                 new_name = name_entry.get().strip().encode("utf-8").decode("utf-8")
             except:
                 new_name = name_entry.get().strip()
-            if new_name:
-                self.image_names[idx] = new_name
+            # 直接存储输入内容（包括空字符串），不自动填充默认值
+            self.image_names[idx] = new_name
 
         name_entry.bind("<KeyRelease>", _update_img_name)
 
@@ -486,7 +486,7 @@ class ImageCompositeGUI(ctk.CTk):
             if not output_path.lower().endswith(".png"):
                 output_path += ".png"
 
-            # 步骤1：每张图片独立处理（分辨率转换→添加水印）
+            # 步骤1：每张图片独立处理（分辨率转换→添加水印（留空则不添加））
             images_with_watermark = []
             image_sizes = []
             for img_path, img_name in zip(self.image_paths, self.image_names):
@@ -499,7 +499,7 @@ class ImageCompositeGUI(ctk.CTk):
                 # 转换为固定分辨率（横屏1920*1080/竖屏1080*1920）
                 resized_img = self._resize_image_by_orientation(img)
 
-                # 添加水印（使用本地字体msyhbd.ttc，默认100号字号）
+                # 添加水印（留空则不执行水印绘制）
                 img_with_wm = self._add_watermark_to_image(
                     resized_img, img_name, target_font_size, watermark_color
                 )
@@ -585,10 +585,10 @@ class ImageCompositeGUI(ctk.CTk):
         upload_frame = ctk.CTkFrame(self.tab_first_frame, fg_color="transparent")
         upload_frame.pack(pady=10, padx=20, fill="x")
 
-        # 标题（更新拼图尺寸提示）
+        # 标题（更新拼图尺寸+空值提示）
         ctk.CTkLabel(
             upload_frame,
-            text="一、图片上传（1张主图+1-4张分图）",
+            text="一、图片上传（1张主图+1-4张分图，水印留空则不添加）",
             font=ctk.CTkFont(size=14, weight="bold")
         ).grid(row=0, column=0, columnspan=4, pady=5, sticky="w")
 
@@ -611,9 +611,9 @@ class ImageCompositeGUI(ctk.CTk):
             fg_color="#ff6b6b"
         ).grid(row=1, column=3, padx=5, pady=8)
 
-        # 主图水印文字输入框（保留自定义功能）
+        # 主图水印文字输入框（更新占位提示，支持留空）
         ctk.CTkLabel(upload_frame, text="主图水印文字：").grid(row=2, column=0, padx=5, pady=5, sticky="e")
-        self.main_img_name_entry = ctk.CTkEntry(upload_frame, width=200, placeholder_text="输入主图水印（支持中文）")
+        self.main_img_name_entry = ctk.CTkEntry(upload_frame, width=200, placeholder_text="输入主图水印（留空则不加水印）")
         self.main_img_name_entry.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
         # 绑定主图水印修改事件
         self.main_img_name_entry.bind("<KeyRelease>", self._update_main_img_name)
@@ -655,10 +655,10 @@ class ImageCompositeGUI(ctk.CTk):
         watermark_frame = ctk.CTkFrame(self.tab_first_frame, fg_color="transparent")
         watermark_frame.pack(pady=10, padx=20, fill="x")
 
-        # 标题
+        # 标题（更新空值提示）
         ctk.CTkLabel(
             watermark_frame,
-            text="二、水印参数设置（主图字号=分图字号×2）",
+            text="二、水印参数设置（主图字号=分图字号×2，水印文字留空则不添加）",
             font=ctk.CTkFont(size=14, weight="bold")
         ).grid(row=0, column=0, columnspan=4, pady=5, sticky="w")
 
@@ -690,10 +690,10 @@ class ImageCompositeGUI(ctk.CTk):
         self.first_frame_bg_color_entry.insert(0, "255,255,255")
         self.first_frame_bg_color_entry.grid(row=3, column=1, padx=5, pady=5)
 
-        # 提示信息（更新拼图尺寸说明）
+        # 提示信息（更新拼图尺寸+空值逻辑说明）
         ctk.CTkLabel(
             watermark_frame,
-            text="提示：主图1920*1080（坐标0,540），分图960*540四角，最终合成1920*2160",
+            text="提示：主图1920*1080（坐标0,540），分图960*540四角，最终合成1920*2160；水印文字留空则不添加",
             font=ctk.CTkFont(size=10),
             text_color="#666666"
         ).grid(row=3, column=2, columnspan=2, pady=5, sticky="w")
@@ -725,7 +725,7 @@ class ImageCompositeGUI(ctk.CTk):
         self.first_frame_result_label.pack(pady=5)
 
     def _upload_main_image(self):
-        """上传主图（覆盖原有主图，自动填充水印输入框默认值）"""
+        """上传主图（覆盖原有主图，自动填充水印输入框默认值，用户可删除留空）"""
         # 选择图片
         img_path = filedialog.askopenfilename(
             title="选择主图文件",
@@ -746,7 +746,7 @@ class ImageCompositeGUI(ctk.CTk):
         self.main_img_name = default_img_name
         self.main_img_label.configure(text=f"已上传：{os.path.basename(img_path)[:20]}...")
 
-        # 填充主图水印输入框（默认值，用户可修改）
+        # 填充主图水印输入框（默认值，用户可删除留空）
         self.main_img_name_entry.delete(0, ctk.END)
         self.main_img_name_entry.insert(0, default_img_name)
 
@@ -758,16 +758,16 @@ class ImageCompositeGUI(ctk.CTk):
         self.main_img_name_entry.delete(0, ctk.END)
 
     def _update_main_img_name(self, event):
-        """绑定主图水印输入框，实时更新主图水印名称（保留功能）"""
+        """绑定主图水印输入框，实时更新主图水印名称（留空则存储空字符串）"""
         try:
             new_name = self.main_img_name_entry.get().strip().encode("utf-8").decode("utf-8")
         except:
             new_name = self.main_img_name_entry.get().strip()
-        if new_name:
-            self.main_img_name = new_name
+        # 直接存储输入内容（包括空字符串），不自动填充默认值
+        self.main_img_name = new_name
 
     def _add_sub_image(self):
-        """添加分图（最多4张，保留功能）"""
+        """添加分图（最多4张，水印输入框支持留空）"""
         if len(self.sub_img_paths) >= 4:
             messagebox.showwarning("警告", "分图最多只能添加4张！")
             return
@@ -806,19 +806,19 @@ class ImageCompositeGUI(ctk.CTk):
             width=250
         ).pack(side="left", padx=5)
 
-        # 水印名称输入框
-        name_entry = ctk.CTkEntry(sub_frame, width=150, placeholder_text="输入水印名称（支持中文）")
+        # 水印名称输入框（更新占位提示，支持留空）
+        name_entry = ctk.CTkEntry(sub_frame, width=150, placeholder_text="输入水印名称（留空则不加水印）")
         name_entry.insert(0, default_img_name)
         name_entry.pack(side="left", padx=5)
 
-        # 绑定修改事件
+        # 绑定修改事件（留空则存储空字符串）
         def _update_sub_name(event, idx=len(self.sub_img_paths) - 1):
             try:
                 new_name = name_entry.get().strip().encode("utf-8").decode("utf-8")
             except:
                 new_name = name_entry.get().strip()
-            if new_name:
-                self.sub_img_names[idx] = new_name
+            # 直接存储输入内容（包括空字符串），不自动填充默认值
+            self.sub_img_names[idx] = new_name
 
         name_entry.bind("<KeyRelease>", _update_sub_name)
 
@@ -889,18 +889,18 @@ class ImageCompositeGUI(ctk.CTk):
             if not output_path.lower().endswith(".png"):
                 output_path += ".png"
 
-            # 4. 处理主图（严格按用户要求：缩放为1920*1080，坐标0,540，自定义水印）
+            # 4. 处理主图（严格按用户要求：缩放为1920*1080，坐标0,540，水印留空则不添加）
             if not os.path.exists(self.main_img_path):
                 raise FileNotFoundError(f"主图不存在：{os.path.basename(self.main_img_path)}")
             main_img = Image.open(self.main_img_path).convert("RGBA")
             # 缩放为主图标准尺寸（1920*1080，LANCZOS无损算法）
             main_img_resized = main_img.resize(MAIN_IMG_SIZE, Image.LANCZOS)
-            # 加水印（使用主图自定义水印+2倍字号）
+            # 加水印（留空则不执行水印绘制）
             main_img_with_wm = self._add_watermark_to_image(
                 main_img_resized, self.main_img_name, main_font_size, watermark_color
             )
 
-            # 5. 处理分图（严格按用户要求：缩放为960*540，四角摆放）
+            # 5. 处理分图（严格按用户要求：缩放为960*540，四角摆放，水印留空则不添加）
             sub_imgs_with_wm = []
             for sub_path, sub_name in zip(self.sub_img_paths, self.sub_img_names):
                 if not os.path.exists(sub_path):
@@ -908,7 +908,7 @@ class ImageCompositeGUI(ctk.CTk):
                 sub_img = Image.open(sub_path).convert("RGBA")
                 # 缩放为分图标准尺寸（960*540，LANCZOS无损算法）
                 sub_img_resized = sub_img.resize(SUB_IMG_SIZE, Image.LANCZOS)
-                # 加水印（使用分图默认50号字号，支持修改）
+                # 加水印（留空则不执行水印绘制）
                 sub_img_with_wm = self._add_watermark_to_image(
                     sub_img_resized, sub_name, sub_font_size, watermark_color
                 )
@@ -927,8 +927,10 @@ class ImageCompositeGUI(ctk.CTk):
             # 9. 保存图片
             final_canvas.save(output_path, format="PNG", optimize=False)
 
-            # 10. 更新提示（显示正确拼图参数和自定义水印信息）
-            success_text = f"第一帧合成成功！\n最终分辨率：{FINAL_SIZE[0]} × {FINAL_SIZE[1]} 像素\n主图：1920*1080（坐标0,540，水印：{self.main_img_name}，字号{main_font_size}）\n分图：{len(self.sub_img_paths)}张（960*540四角，字号{sub_font_size}）\n保存路径：{os.path.abspath(output_path)}"
+            # 10. 更新提示（显示正确拼图参数和水印空值逻辑）
+            main_watermark_tip = f"水印：{self.main_img_name}" if self.main_img_name else "无水印"
+            sub_watermark_tip = f"字号{sub_font_size}" if any(self.sub_img_names) else "无水印"
+            success_text = f"第一帧合成成功！\n最终分辨率：{FINAL_SIZE[0]} × {FINAL_SIZE[1]} 像素\n主图：1920*1080（坐标0,540，{main_watermark_tip}，字号{main_font_size}）\n分图：{len(self.sub_img_paths)}张（960*540四角，{sub_watermark_tip}）\n保存路径：{os.path.abspath(output_path)}"
             self.first_frame_result_label.configure(text=success_text, text_color="#2ecc71")
             messagebox.showinfo("成功", success_text)
 
@@ -937,7 +939,7 @@ class ImageCompositeGUI(ctk.CTk):
             self.first_frame_result_label.configure(text=error_info, text_color="#e74c3c")
             messagebox.showerror("错误", error_info)
 
-    # ===================== 通用工具方法（复用，无修改） =====================
+    # ===================== 通用工具方法（核心修改：水印空值逻辑） =====================
     def _parse_rgb_str(self, rgb_str):
         """解析RGB字符串为元组"""
         try:
@@ -984,27 +986,26 @@ class ImageCompositeGUI(ctk.CTk):
 
     def _clean_watermark_text(self, text):
         """
-        清洗水印文字，处理乱码源头，确保可渲染
+        清洗水印文字，处理乱码源头，核心修改：留空则返回空字符串（不兜底填充）
         :param text: 原始水印文字
-        :return: 清洗后的可渲染文字
+        :return: 清洗后的可渲染文字（空字符串表示不加水印）
         """
-        if not text:
-            return "Unnamed"
+        # 第一步：直接判断原始文字是否为空（去除首尾空白后），为空则直接返回空字符串
+        raw_text_stripped = text.strip()
+        if not raw_text_stripped:
+            return ""
 
-        # 步骤1：强制UTF-8编码，去除不可见字符
+        # 步骤2：强制UTF-8编码，去除不可见字符
         try:
             text = text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
         except:
             text = text.encode("gbk", errors="ignore").decode("utf-8", errors="ignore")
 
-        # 步骤2：去除特殊字符（避免渲染失败），保留中文、英文、数字、常用符号
-        text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\-· ]', '', text)
+        # 步骤3：去除特殊字符（避免渲染失败），保留中文、英文、数字、常用符号
+        text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\-· ]', '', text).strip()
 
-        # 步骤3：文字为空时，填充默认值（避免空白）
-        if not text.strip():
-            return "Unnamed"
-
-        return text
+        # 步骤4：清洗后为空则返回空字符串（不兜底为"Unnamed"）
+        return text if text else ""
 
     def _resize_image_by_orientation(self, img):
         """
@@ -1032,22 +1033,26 @@ class ImageCompositeGUI(ctk.CTk):
 
     def _add_watermark_to_image(self, img, watermark_text, target_font_size, font_color):
         """
-        每张图片独立添加左上角水印，使用本地字体msyhbd.ttc，100%无乱码（保留功能）
+        每张图片独立添加左上角水印，核心修改：清洗后水印文字为空则直接返回原图（不绘制水印）
         :param img: 原始RGBA图片对象
-        :param watermark_text: 水印文字（主图自定义/分图默认）
+        :param watermark_text: 水印文字（主图自定义/分图默认，支持留空）
         :param target_font_size: 目标字号（主图2倍/分图50）
         :param font_color: 水印颜色
-        :return: 加水印后的图片对象
+        :return: 加水印后的图片对象（无水印则返回原图复制）
         """
         # 复制原图避免修改，确保RGBA格式（支持透明）
         img_with_watermark = img.copy().convert("RGBA")
-        draw = ImageDraw.Draw(img_with_watermark)
-        img_width, img_height = img_with_watermark.size
 
-        # 步骤1：清洗水印文字，从源头避免乱码
+        # 步骤1：清洗水印文字，获取干净的文本
         clean_text = self._clean_watermark_text(watermark_text)
 
+        # 核心修改：判断清洗后的文字是否为空，为空则直接返回原图（不执行水印绘制）
+        if not clean_text:
+            return img_with_watermark
+
         # 步骤2：加载本地字体，自动适配字号（核心：无系统字体依赖）
+        draw = ImageDraw.Draw(img_with_watermark)
+        img_width, img_height = img_with_watermark.size
         font, adapted_font_size = self._safe_load_local_font(
             target_font_size, img_width, img_height
         )
