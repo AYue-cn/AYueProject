@@ -11,6 +11,7 @@ Sora视频助手（完整优化版）
 7.  修复前缀模板选择延迟绑定问题
 8.  屏蔽HTTPS不安全请求警告
 9.  加载同文件夹下的ico文件作为窗口logo
+10. 新增Markdown解析功能：基于markdown+bs4将MD转为纯文本
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, Menu
@@ -25,6 +26,8 @@ import os
 import uuid
 import base64
 import re
+import markdown  # 新增：Markdown解析库
+from bs4 import BeautifulSoup  # 新增：HTML解析提取纯文本
 from dataclasses import dataclass, field
 from typing import List
 
@@ -67,6 +70,67 @@ DEFAULT_SUFFIX_TEMPLATES = {
     "无": ""
 }
 
+
+# ==================== Markdown解析工具函数（基于markdown+bs4） ====================
+def parse_markdown_text_to_plain(md_text: str) -> str:
+    """
+    将Markdown文本解析为纯文本（基于markdown库+BeautifulSoup）
+    :param md_text: Markdown格式的文本内容
+    :return: 提取后的纯文本字符串
+    """
+    if not md_text or md_text.strip() == "":
+        return ""
+
+    try:
+        # 1. 将Markdown解析为HTML
+        html_content = markdown.markdown(md_text)
+
+        # 2. 使用BeautifulSoup提取纯文本（去除所有HTML标签）
+        soup = BeautifulSoup(html_content, 'html.parser')
+        # get_text参数说明：
+        # - strip=True：去除每个文本块的首尾空白
+        # - separator='\n'：用换行符分隔不同标签的文本
+        plain_text = soup.get_text(strip=True, separator='\n')
+
+        # 3. 清理多余的空行（保留单个空行）
+        plain_text = re.sub(r'\n{3,}', '\n\n', plain_text).strip()
+
+        return plain_text
+
+    except Exception as e:
+        print(f"Markdown解析失败：{str(e)}")
+        # 解析失败时返回原始文本（避免内容丢失）
+        return md_text.strip()
+
+
+def read_md_file(file_path: str) -> tuple[str, str]:
+    """
+    读取Markdown文件，返回解析后的HTML和纯文本（保留你提供的文件读取逻辑）
+    :param file_path: md文件路径
+    :return: html_str(HTML字符串), plain_text(纯文本字符串)
+    """
+    try:
+        # 1. 读取md文件内容
+        with open(file_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
+
+        # 2. 将Markdown解析为HTML
+        html_str = markdown.markdown(md_content)
+
+        # 3. 从HTML中提取纯文本（去除所有标签）
+        soup = BeautifulSoup(html_str, 'html.parser')
+        plain_text = soup.get_text(strip=True, separator='\n')
+
+        return html_str, plain_text
+
+    except FileNotFoundError:
+        print(f"错误：未找到文件 {file_path}")
+        return "", ""
+    except Exception as e:
+        print(f"读取失败：{str(e)}")
+        return "", ""
+
+
 # ==================== 辅助函数：Base64判断与简写 ====================
 def is_base64(s: str) -> bool:
     """判断字符串是否为标准超长Base64格式"""
@@ -81,6 +145,7 @@ def is_base64(s: str) -> bool:
     except (base64.binascii.Error, ValueError):
         return False
 
+
 def shorten_base64_in_data(data: dict or list or str) -> dict or list or str:
     """递归遍历数据，将超长Base64简写为"base64" """
     if isinstance(data, dict):
@@ -93,6 +158,7 @@ def shorten_base64_in_data(data: dict or list or str) -> dict or list or str:
         return "base64"
     else:
         return data
+
 
 # ==================== 任务数据类 ====================
 @dataclass
@@ -118,6 +184,7 @@ class SoraTask:
     request_json: str = ""
     response_json: str = ""
 
+
 # ==================== 配置读写函数 ====================
 def load_config():
     default = {
@@ -140,12 +207,14 @@ def load_config():
     except:
         return default
 
+
 def save_config(config):
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     except:
         pass
+
 
 def read_api_key():
     if os.path.exists(API_FILE_PATH):
@@ -156,6 +225,7 @@ def read_api_key():
             return ""
     return ""
 
+
 def save_api_key(key):
     try:
         with open(API_FILE_PATH, "w", encoding="utf-8") as f:
@@ -164,6 +234,7 @@ def save_api_key(key):
     except:
         return False
 
+
 def save_tasks(tasks: List[SoraTask]):
     try:
         data = [vars(t) for t in tasks]
@@ -171,6 +242,7 @@ def save_tasks(tasks: List[SoraTask]):
             json.dump(data, f, ensure_ascii=False, indent=2)
     except:
         pass
+
 
 def load_tasks() -> List[SoraTask]:
     if not os.path.exists(TASKS_CACHE_FILE):
@@ -182,6 +254,7 @@ def load_tasks() -> List[SoraTask]:
     except:
         return []
 
+
 # ==================== 工具函数 ====================
 def image_to_base64(path: str) -> str:
     try:
@@ -191,6 +264,7 @@ def image_to_base64(path: str) -> str:
             return base64.b64encode(f.read()).decode("utf-8")
     except:
         return ""
+
 
 # ==================== 主程序类 ====================
 class SoraVideoGenerator:
@@ -301,11 +375,27 @@ class SoraVideoGenerator:
         # 主体提示词
         main_labelframe = ttkb.Labelframe(main_container, text="🎯 主体提示词（核心描述）", padding=10)
         main_labelframe.pack(fill=BOTH, expand=True, pady=(0, 10))
-        main_btn = ttkb.Menubutton(main_labelframe, text="主体模板", bootstyle="success")
+
+        # 主体模板 + 解析MD按钮容器
+        main_btn_frame = ttkb.Frame(main_labelframe)
+        main_btn_frame.pack(anchor=W, pady=(0, 5), fill=X)
+
+        main_btn = ttkb.Menubutton(main_btn_frame, text="主体模板", bootstyle="success")
         main_menu = Menu(main_btn, tearoff=0)
         main_btn["menu"] = main_menu
         self.main_menu = main_menu
-        main_btn.pack(anchor=W, pady=(0, 5))
+        main_btn.pack(side=LEFT, padx=(0, 10))
+
+        # 新增【解析md】按钮
+        parse_md_btn = ttkb.Button(
+            main_btn_frame,
+            text="解析md",
+            command=self.parse_main_prompt_from_md,
+            bootstyle="primary-outline",
+            width=10
+        )
+        parse_md_btn.pack(side=LEFT)
+
         self.main_prompt = tk.Text(main_labelframe, wrap=WORD, font=("Arial", 11), height=10)
         self.main_prompt.pack(fill=BOTH, expand=True)
 
@@ -341,11 +431,14 @@ class SoraVideoGenerator:
 
         # 视频参数
         ttkb.Label(param_frame, text="视频比例：").pack(side=LEFT)
-        ttkb.Combobox(param_frame, textvariable=self.aspect_ratio, values=["16:9", "9:16"], state="readonly", width=8).pack(side=LEFT, padx=5)
+        ttkb.Combobox(param_frame, textvariable=self.aspect_ratio, values=["16:9", "9:16"], state="readonly",
+                      width=8).pack(side=LEFT, padx=5)
         ttkb.Label(param_frame, text="  时长(秒)：").pack(side=LEFT)
-        ttkb.Combobox(param_frame, textvariable=self.duration, values=["15", "10"], state="readonly", width=8).pack(side=LEFT, padx=5)
+        ttkb.Combobox(param_frame, textvariable=self.duration, values=["15", "10"], state="readonly", width=8).pack(
+            side=LEFT, padx=5)
         ttkb.Label(param_frame, text="  清晰度：").pack(side=LEFT)
-        ttkb.Combobox(param_frame, textvariable=self.size, values=["small", "large"], state="readonly", width=8).pack(side=LEFT, padx=5)
+        ttkb.Combobox(param_frame, textvariable=self.size, values=["small", "large"], state="readonly", width=8).pack(
+            side=LEFT, padx=5)
 
         # 参考图
         ttkb.Label(right, text="参考图：").pack(anchor=W)
@@ -364,18 +457,45 @@ class SoraVideoGenerator:
         # 操作按钮
         btns = ttkb.Frame(self.create_tab)
         btns.pack(fill=X, pady=(20, 30), padx=20)
-        ttkb.Checkbutton(btns, text="添加后自动提交", variable=self.auto_submit, bootstyle="round-toggle").pack(side=LEFT, padx=30)
-        ttkb.Checkbutton(btns, text="成功后自动下载", variable=self.auto_download_video, bootstyle="round-toggle").pack(side=LEFT, padx=30)
-        ttkb.Button(btns, text="🗑️ 清空输入", command=self.clear_input, bootstyle="danger-outline").pack(side=RIGHT, padx=20)
-        ttkb.Button(btns, text="✅ 添加任务", command=self.add_single_task, bootstyle="success").pack(side=RIGHT, padx=20)
+        ttkb.Checkbutton(btns, text="添加后自动提交", variable=self.auto_submit, bootstyle="round-toggle").pack(
+            side=LEFT, padx=30)
+        ttkb.Checkbutton(btns, text="成功后自动下载", variable=self.auto_download_video, bootstyle="round-toggle").pack(
+            side=LEFT, padx=30)
+        ttkb.Button(btns, text="🗑️ 清空输入", command=self.clear_input, bootstyle="danger-outline").pack(side=RIGHT,
+                                                                                                         padx=20)
+        ttkb.Button(btns, text="✅ 添加任务", command=self.add_single_task, bootstyle="success").pack(side=RIGHT,
+                                                                                                     padx=20)
+
+    def parse_main_prompt_from_md(self):
+        """解析主体提示词中的Markdown内容为纯文本（基于markdown+bs4）"""
+        # 获取主体提示词的原始内容
+        original_text = self.main_prompt.get("1.0", tk.END)
+        if not original_text.strip():
+            messagebox.showinfo("提示", "主体提示词为空，无需解析")
+            return
+
+        # 调用基于markdown+bs4的解析函数
+        parsed_text = parse_markdown_text_to_plain(original_text)
+
+        # 替换主体提示词内容
+        self.main_prompt.delete("1.0", tk.END)
+        self.main_prompt.insert("1.0", parsed_text)
+
+        # 日志记录
+        self.log(
+            f"📝 已将主体提示词的Markdown内容解析为纯文本，原长度：{len(original_text)}，解析后长度：{len(parsed_text)}")
+        messagebox.showinfo("成功", "Markdown格式解析完成，已替换为纯文本！")
 
     def _build_manage_tab(self):
         # 顶部操作按钮
         top = ttkb.Frame(self.manage_tab)
         top.pack(fill=X, pady=10, padx=10)
-        ttkb.Button(top, text="🔄 手动刷新状态", command=self.manual_refresh_all_tasks, bootstyle="primary", width=20).pack(side=LEFT, padx=10)
-        ttkb.Button(top, text="🚀 提交所有待处理", command=self.submit_all_pending_tasks, bootstyle="success", width=20).pack(side=LEFT, padx=10)
-        ttkb.Button(top, text="🗑️ 清空已完成", command=self.clear_finished_tasks, bootstyle="danger", width=20).pack(side=LEFT, padx=10)
+        ttkb.Button(top, text="🔄 手动刷新状态", command=self.manual_refresh_all_tasks, bootstyle="primary",
+                    width=20).pack(side=LEFT, padx=10)
+        ttkb.Button(top, text="🚀 提交所有待处理", command=self.submit_all_pending_tasks, bootstyle="success",
+                    width=20).pack(side=LEFT, padx=10)
+        ttkb.Button(top, text="🗑️ 清空已完成", command=self.clear_finished_tasks, bootstyle="danger", width=20).pack(
+            side=LEFT, padx=10)
 
         # 任务列表
         tree_frame = ttkb.Labelframe(self.manage_tab, text="任务列表", padding=10)
@@ -765,7 +885,8 @@ class SoraVideoGenerator:
             )
             if save_path:
                 self.log(f"📥 开始手动下载 | 任务ID：{task.task_id[:8]}")
-                threading.Thread(target=self._download_video, args=(task.video_url, save_path, task, False), daemon=True).start()
+                threading.Thread(target=self._download_video, args=(task.video_url, save_path, task, False),
+                                 daemon=True).start()
 
     def submit_task(self, task):
         """提交任务"""
@@ -875,7 +996,8 @@ class SoraVideoGenerator:
                 task.video_url = data["results"][0].get("url", "")
                 if self.auto_download_video.get() and not task.download_path:
                     save_path = os.path.join(self.download_dir.get(), f"{task.task_id}.mp4")
-                    threading.Thread(target=self._download_video, args=(task.video_url, save_path, task, True), daemon=True).start()
+                    threading.Thread(target=self._download_video, args=(task.video_url, save_path, task, True),
+                                     daemon=True).start()
 
             if task.status != old_status:
                 self.log(f"📊 任务状态更新 | 任务ID：{task.task_id[:8]} | 旧状态：{old_status} | 新状态：{task.status}")
@@ -997,6 +1119,7 @@ class SoraVideoGenerator:
         save_tasks(self.tasks)
         self.log("🛑 任务监控已停止")
 
+
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
     # 检查依赖
@@ -1004,7 +1127,9 @@ if __name__ == "__main__":
     required_deps = [
         ("requests", "requests"),
         ("ttkbootstrap", "ttkbootstrap"),
-        ("urllib3", "urllib3")
+        ("urllib3", "urllib3"),
+        ("markdown", "markdown"),  # 新增：检查markdown库
+        ("bs4", "bs4")  # 新增：检查BeautifulSoup库
     ]
 
     for dep_name, import_name in required_deps:
