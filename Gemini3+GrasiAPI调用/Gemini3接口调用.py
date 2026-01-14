@@ -15,7 +15,6 @@ HOST_OPTIONS = {
     "国内直连": "https://grsai.dakka.com.cn"
 }
 DEFAULT_HOST = "国内直连"
-DEFAULT_API_KEY = "sk-f959a7f1bfb74f36bade9ac6208a62df"
 DEFAULT_MODEL_CHAT = "gemini-3-pro"
 DEFAULT_ENCODING = "utf-8"
 
@@ -31,7 +30,7 @@ COLOR_ASSISTANT = "#E27D60"  # 珊瑚色（AI消息）
 COLOR_SYSTEM = "#85DCBA"  # 薄荷绿（系统消息）
 
 
-# ===================== 路径修复 =====================
+# ===================== 路径修复（先定义函数） =====================
 def get_base_dir():
     """获取程序真实运行目录（适配EXE打包）"""
     if hasattr(sys, 'frozen'):
@@ -40,8 +39,50 @@ def get_base_dir():
         return os.path.dirname(__file__)
 
 
-# 初始化全局路径
+# ===================== 初始化全局路径（函数定义后再初始化） =====================
 BASE_DIR = get_base_dir()
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")  # 现在get_base_dir已定义，不会报错
+
+
+# ===================== 配置文件操作 =====================
+def load_config():
+    """加载配置文件，不存在则创建默认配置"""
+    default_config = {
+        "api_key": "默认APIKEY",  # 默认值（首次运行用）
+        "default_host": DEFAULT_HOST,
+        "default_model": DEFAULT_MODEL_CHAT,
+        "stream": True
+    }
+
+    try:
+        if not os.path.exists(CONFIG_FILE):
+            # 创建默认配置文件
+            save_config(default_config)
+            log_debug(f"创建默认配置文件：{CONFIG_FILE}")
+            return default_config
+
+        with open(CONFIG_FILE, "r", encoding=DEFAULT_ENCODING) as f:
+            config = json.load(f)
+        # 补全缺失的配置项
+        for key, value in default_config.items():
+            if key not in config:
+                config[key] = value
+        return config
+    except Exception as e:
+        log_debug(f"加载配置文件失败，使用默认配置：{e}")
+        return default_config
+
+
+def save_config(config):
+    """保存配置到JSON文件"""
+    try:
+        with open(CONFIG_FILE, "w", encoding=DEFAULT_ENCODING) as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        log_debug(f"保存配置文件失败：{e}")
+        messagebox.showerror("错误", f"保存配置失败：{str(e)}")
+        return False
 
 
 # ===================== 调试日志 =====================
@@ -87,6 +128,9 @@ class Gemini3ChatApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # 加载配置文件
+        self.config = load_config()
+
         # 设置CustomTkinter主题
         ctk.set_appearance_mode("system")  # system/light/dark
         ctk.set_default_color_theme("blue")  # blue/green/dark-blue
@@ -94,18 +138,18 @@ class Gemini3ChatApp(ctk.CTk):
         # 窗口配置
         self.title("Gemini3 AI 聊天助手")
         self.geometry("1000x700")
-        self.minsize(800, 1000)
+        self.minsize(800, 1000)  # 修正最小尺寸（原1000太高）
 
         # 聊天状态
         self.chat_messages = [{"role": "system", "content": "你是专业友好的AI助手，用中文清晰准确回答问题。"}]
-        self.current_chat_model = DEFAULT_MODEL_CHAT  # 直接用变量存储
-        self.current_host = DEFAULT_HOST  # 直接用变量存储
-        self.current_stream = True
+        self.current_chat_model = self.config.get("default_model", DEFAULT_MODEL_CHAT)
+        self.current_host = self.config.get("default_host", DEFAULT_HOST)
+        self.current_stream = self.config.get("stream", True)
         self.last_chat_reply = ""
         self.is_chat_requesting = False
 
-        # 全局配置（改用普通变量存储API Key）
-        self.api_key_value = DEFAULT_API_KEY
+        # 从配置加载API Key
+        self.api_key_value = self.config.get("api_key", "")
 
         # 创建UI
         self._create_ui()
@@ -116,70 +160,77 @@ class Gemini3ChatApp(ctk.CTk):
         config_frame = ctk.CTkFrame(self, corner_radius=8)
         config_frame.pack(fill="x", padx=20, pady=10, ipady=10)
 
-        # API Key配置（移除textvariable，改用get()/insert()）
+        # API Key配置（增加保存按钮）
         api_label = ctk.CTkLabel(config_frame, text="API Key：")
         api_label.pack(side="left", padx=(20, 5))
         self.api_entry = ctk.CTkEntry(config_frame, show="*", width=400)
-        self.api_entry.insert(0, self.api_key_value)  # 初始化值
+        self.api_entry.insert(0, self.api_key_value)  # 从配置加载值
         self.api_entry.pack(side="left", padx=5)
 
-        # 节点选择（移除textvariable，改用绑定事件）
+        # 保存API Key按钮
+        save_api_btn = ctk.CTkButton(
+            config_frame, text="保存Key", command=self._save_api_key,
+            width=80, corner_radius=6, fg_color="#2ECC71"
+        )
+        save_api_btn.pack(side="left", padx=5)
+
+        # 节点选择
         host_label = ctk.CTkLabel(config_frame, text="节点：")
         host_label.pack(side="left", padx=(20, 5))
         self.host_combo = ctk.CTkComboBox(
             config_frame, values=list(HOST_OPTIONS.keys()), width=120
         )
-        self.host_combo.set(self.current_host)  # 设置初始值
+        self.host_combo.set(self.current_host)
         self.host_combo.pack(side="left", padx=5)
         self.host_combo.bind("<<ComboboxSelected>>", self._on_host_change)
 
-        # 模型选择（移除textvariable，改用绑定事件）
+        # 模型选择
         model_label = ctk.CTkLabel(config_frame, text="模型：")
         model_label.pack(side="left", padx=(20, 5))
         self.model_combo = ctk.CTkComboBox(
             config_frame, values=SUPPORTED_CHAT_MODELS, width=180
         )
-        self.model_combo.set(self.current_chat_model)  # 设置初始值
+        self.model_combo.set(self.current_chat_model)
         self.model_combo.pack(side="left", padx=5)
         self.model_combo.bind("<<ComboboxSelected>>", self._on_chat_model_change)
 
-        # 流式响应开关（改用普通变量+状态同步）
+        # 流式响应开关
         self.stream_switch = ctk.CTkCheckBox(
             config_frame, text="流式响应", command=self._on_stream_toggle
         )
-        self.stream_switch.select()  # 默认选中（开启流式）
+        if self.current_stream:
+            self.stream_switch.select()
         self.stream_switch.pack(side="left", padx=(20, 20))
 
-        # 聊天显示区（改用原生Text组件，嵌套在CTkFrame中）
+        # 聊天显示区
         chat_display_frame = ctk.CTkFrame(self, corner_radius=8)
         chat_display_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
         display_label = ctk.CTkLabel(chat_display_frame, text="聊天记录", font=("Arial", 14, "bold"))
         display_label.pack(anchor="w", padx=20, pady=10)
 
-        # 原生Text组件（支持tag_configure）
+        # 原生Text组件
         self.chat_text = tk.Text(
             chat_display_frame, font=("微软雅黑", 12), wrap="word",
-            bg=self._get_background_color(),  # 适配主题背景色
-            fg=self._get_foreground_color(),  # 适配主题文字色
+            bg=self._get_background_color(),
+            fg=self._get_foreground_color(),
             bd=0, relief="flat"
         )
-        # 配置tag样式（核心修复：原生Text支持tag）
         self.chat_text.tag_configure("user", foreground=COLOR_USER)
         self.chat_text.tag_configure("assistant", foreground=COLOR_ASSISTANT)
         self.chat_text.tag_configure("system", foreground=COLOR_SYSTEM)
-        # 添加滚动条
+
         chat_scrollbar = ctk.CTkScrollbar(
             chat_display_frame, command=self.chat_text.yview
         )
         self.chat_text.configure(yscrollcommand=chat_scrollbar.set)
-        # 布局
+
         self.chat_text.pack(side="left", fill="both", expand=True, padx=(20, 0), pady=(0, 20))
         chat_scrollbar.pack(side="right", fill="y", padx=(0, 20), pady=(0, 20))
-        # 初始欢迎消息
+
         self.chat_text.insert("end", "欢迎使用Gemini3 AI聊天助手！\n\n", "system")
 
-        # 输入区（继续用CTkTextbox，因为输入区不需要tag样式）
+        # 输入区
         input_frame = ctk.CTkFrame(self, corner_radius=8)
         input_frame.pack(fill="x", padx=20, pady=(0, 20), ipady=10)
 
@@ -226,33 +277,51 @@ class Gemini3ChatApp(ctk.CTk):
         )
         save_all_btn.pack(side="left", padx=5)
 
+    def _save_api_key(self):
+        """保存API Key到配置文件"""
+        new_api_key = self.api_entry.get().strip()
+        if not new_api_key:
+            messagebox.showwarning("提示", "API Key不能为空！")
+            return
+
+        self.config["api_key"] = new_api_key
+        if save_config(self.config):
+            self.api_key_value = new_api_key
+            messagebox.showinfo("成功", "API Key已保存！")
+
     def _get_background_color(self):
         """适配主题的背景色"""
         if ctk.get_appearance_mode() == "dark":
-            return "#2B2B2B"  # CustomTkinter深色背景
+            return "#2B2B2B"
         else:
-            return "#F5F5F5"  # CustomTkinter浅色背景
+            return "#F5F5F5"
 
     def _get_foreground_color(self):
         """适配主题的文字色"""
         if ctk.get_appearance_mode() == "dark":
-            return "#FFFFFF"  # 白色
+            return "#FFFFFF"
         else:
-            return "#000000"  # 黑色
+            return "#000000"
 
     def _on_host_change(self, event):
         """切换节点"""
         self.current_host = self.host_combo.get()
+        self.config["default_host"] = self.current_host
+        save_config(self.config)
         self._append_chat_message(f"系统：已切换至 {self.current_host} 节点", "system")
 
     def _on_chat_model_change(self, event):
         """切换聊天模型"""
         self.current_chat_model = self.model_combo.get()
+        self.config["default_model"] = self.current_chat_model
+        save_config(self.config)
         self._append_chat_message(f"系统：已切换至 {self.current_chat_model} 模型", "system")
 
     def _on_stream_toggle(self):
         """切换流式响应"""
-        self.current_stream = self.stream_switch.get()  # 获取开关状态（True/False）
+        self.current_stream = self.stream_switch.get()
+        self.config["stream"] = self.current_stream
+        save_config(self.config)
         status = "开启" if self.current_stream else "关闭"
         self._append_chat_message(f"系统：流式响应功能已{status}", "system")
 
@@ -276,9 +345,9 @@ class Gemini3ChatApp(ctk.CTk):
                 self.chat_input_text.insert("end", content)
 
     def _append_chat_message(self, text, tag):
-        """追加聊天消息（适配原生Text组件）"""
+        """追加聊天消息"""
         self.chat_text.insert("end", text + "\n\n", tag)
-        self.chat_text.see("end")  # 自动滚动到底部
+        self.chat_text.see("end")
 
     def _send_chat_message(self):
         """发送聊天消息"""
@@ -286,7 +355,7 @@ class Gemini3ChatApp(ctk.CTk):
             messagebox.showwarning("提示", "AI正在处理请求，请稍候！")
             return
 
-        # 获取API Key（从输入框直接读取）
+        # 从输入框读取API Key（优先使用输入框最新值）
         api_key = self.api_entry.get().strip()
         if not api_key:
             messagebox.showwarning("提示", "请先输入API-Key！")
@@ -297,16 +366,13 @@ class Gemini3ChatApp(ctk.CTk):
             messagebox.showwarning("提示", "请输入对话内容！")
             return
 
-        # 清空输入框
         self.chat_input_text.delete(1.0, "end")
         self._append_chat_message(f"用户：{user_input}", "user")
         self.chat_messages.append({"role": "user", "content": user_input})
 
-        # 标记请求中
         self.is_chat_requesting = True
         self.send_btn.configure(state="disabled", text="处理中...")
 
-        # 异步调用API
         def chat_api_call():
             base_url = HOST_OPTIONS[self.current_host]
             url = f"{base_url}/v1/chat/completions"
@@ -328,7 +394,6 @@ class Gemini3ChatApp(ctk.CTk):
                 response.raise_for_status()
 
                 if self.current_stream:
-                    # 流式响应处理
                     self.after(0, lambda: self.chat_text.insert("end", "AI：", "assistant"))
                     for line in response.iter_lines():
                         if not self.is_chat_requesting:
@@ -348,12 +413,10 @@ class Gemini3ChatApp(ctk.CTk):
                                 continue
                     self.after(0, lambda: self.chat_text.insert("end", "\n\n"))
                 else:
-                    # 非流式响应
                     data = response.json()
                     assistant_content = data["choices"][0]["message"]["content"]
                     self.after(0, lambda: self._append_chat_message(f"AI：{assistant_content}", "assistant"))
 
-                # 保存回复
                 self.last_chat_reply = assistant_content
                 self.chat_messages.append({"role": "assistant", "content": assistant_content})
 
@@ -368,7 +431,7 @@ class Gemini3ChatApp(ctk.CTk):
         threading.Thread(target=chat_api_call, daemon=True).start()
 
     def _update_chat_stream(self, content):
-        """更新流式响应内容（适配原生Text组件）"""
+        """更新流式响应内容"""
         self.chat_text.insert("end", content)
         self.chat_text.see("end")
 
@@ -416,7 +479,6 @@ if __name__ == "__main__":
         app = Gemini3ChatApp()
 
 
-        # 窗口关闭处理
         def on_closing():
             if messagebox.askokcancel("退出", "确定退出Gemini3 AI聊天助手吗？"):
                 app.destroy()

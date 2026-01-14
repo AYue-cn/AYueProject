@@ -1,3 +1,19 @@
-# 忽略JetBrains IDE配置文件夹
-.idea/
+# 1. 忽略单个文件（你的核心需求：屏蔽config.json）
+config.json
+api.txt
+tasks.json
+cache.txt
+
+# 2. 忽略整个文件夹（比如Python虚拟环境、打包产物）
+venv/          # 忽略venv文件夹（结尾必须加/）
+dist/          # 忽略pyinstaller打包的dist文件夹
+build/         # 忽略pyinstaller的build文件夹
+__pycache__/   # 忽略Python编译缓存文件夹
+.idea/         # 忽略PyCharm的配置文件夹
+
+# 3. 忽略特定类型的所有文件
+*.pyc          # 忽略所有.pyc编译文件
+*.log          # 忽略所有日志文件
+*.ico          # 忽略所有图标文件（如果你不需要追踪ico）
+*.exe          # 忽略所有exe可执行文件
 *.iml
