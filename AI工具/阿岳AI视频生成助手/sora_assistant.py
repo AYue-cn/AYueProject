@@ -28,8 +28,8 @@ import json
 import uuid
 import base64
 import re
-import markdown  # Markdown解析库
-from bs4 import BeautifulSoup  # HTML解析提取纯文本
+from markdown_it import MarkdownIt
+from mdit_plain.renderer import RendererPlain
 from dataclasses import dataclass, field
 from typing import List
 
@@ -96,7 +96,7 @@ DEFAULT_SUFFIX_TEMPLATES = {
 # ==================== Markdown解析工具函数（基于markdown+bs4） ====================
 def parse_markdown_text_to_plain(md_text: str) -> str:
     """
-    将Markdown文本解析为纯文本（基于markdown库+BeautifulSoup）
+    将Markdown文本解析为纯文本
     :param md_text: Markdown格式的文本内容
     :return: 提取后的纯文本字符串
     """
@@ -104,18 +104,12 @@ def parse_markdown_text_to_plain(md_text: str) -> str:
         return ""
 
     try:
-        # 1. 将Markdown解析为HTML
-        html_content = markdown.markdown(md_text)
-
-        # 2. 使用BeautifulSoup提取纯文本（去除所有HTML标签）
-        soup = BeautifulSoup(html_content, 'html.parser')
-        # get_text参数说明：
-        # - strip=True：去除每个文本块的首尾空白
-        # - separator='\n'：用换行符分隔不同标签的文本
-        plain_text = soup.get_text(strip=True, separator='\n')
-
+        # 初始化MD解析器 + 纯文本渲染器
+        md = MarkdownIt(renderer_cls=RendererPlain)
+        # 解析并渲染为纯文本
+        text = md.render(md_text)
         # 3. 清理多余的空行（保留单个空行）
-        plain_text = re.sub(r'\n{3,}', '\n\n', plain_text).strip()
+        plain_text =  "\n".join([line.strip() for line in text.split("\n") if line.strip()])
 
         return plain_text
 
