@@ -10,9 +10,12 @@ Sora视频助手（完整优化版）
 6.  视频下载（自动/手动下载，仅以任务ID命名，避免特殊字符）
 7.  修复前缀模板选择延迟绑定问题
 8.  屏蔽HTTPS不安全请求警告
-9.  加载同文件夹下的ico文件作为窗口logo
-10. 新增Markdown解析功能：基于markdown+bs4将MD转为纯文本
+9.  支持ICO文件打包（无需和EXE同目录）
+10. 启动默认最大化窗口
+11. 新增Markdown解析功能：基于markdown+bs4将MD转为纯文本
 """
+import sys  # 新增：用于获取打包后的临时目录
+import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, Menu
 import ttkbootstrap as ttkb
@@ -22,21 +25,39 @@ import urllib3
 import threading
 import time
 import json
-import os
 import uuid
 import base64
 import re
-import markdown  # 新增：Markdown解析库
-from bs4 import BeautifulSoup  # 新增：HTML解析提取纯文本
+import markdown  # Markdown解析库
+from bs4 import BeautifulSoup  # HTML解析提取纯文本
 from dataclasses import dataclass, field
 from typing import List
 
 # 屏蔽不安全的HTTPS请求警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
+# ==================== 资源路径兼容（打包/开发环境） ====================
+def get_resource_path(relative_path):
+    """
+    获取打包后/开发环境下的资源文件路径
+    :param relative_path: 资源文件的相对路径（如 "4odpx-r40oi-001.ico"）
+    :return: 实际可用的绝对路径
+    """
+    try:
+        # 打包后：PyInstaller 创建的临时目录（sys._MEIPASS）
+        base_path = sys._MEIPASS
+    except Exception:
+        # 开发环境：使用当前脚本所在目录
+        base_path = os.path.abspath(".")
+
+    # 拼接绝对路径
+    return os.path.join(base_path, relative_path)
+
+
 # ==================== 配置常量 ====================
 APP_NAME = "Sora视频助手4.0"
-ICON_FILE = "4odpx-r40oi-001.ico"  # 同文件夹下的logo文件
+ICON_FILE = get_resource_path("4odpx-r40oi-001.ico")  # 兼容打包/开发环境的ICO路径
 API_FILE_PATH = "api.txt"
 CONFIG_FILE = "config.json"
 TASKS_CACHE_FILE = "tasks.json"
@@ -105,7 +126,7 @@ def parse_markdown_text_to_plain(md_text: str) -> str:
 
 def read_md_file(file_path: str) -> tuple[str, str]:
     """
-    读取Markdown文件，返回解析后的HTML和纯文本（保留你提供的文件读取逻辑）
+    读取Markdown文件，返回解析后的HTML和纯文本
     :param file_path: md文件路径
     :return: html_str(HTML字符串), plain_text(纯文本字符串)
     """
@@ -271,10 +292,8 @@ class SoraVideoGenerator:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_NAME)
-        # 替换固定尺寸为最大化窗口（保留窗口边框，推荐）
+        # 关键修改：默认最大化窗口（替代固定尺寸1920x1000）
         self.root.state('zoomed')
-        # 可选：如果想要全屏（无窗口边框），用这行替代上面的state：
-        # self.root.attributes('-fullscreen', True)
         self.root.resizable(True, True)
 
         # 第一步：先初始化核心属性（避免属性不存在）
@@ -320,7 +339,7 @@ class SoraVideoGenerator:
         self.log("🚀 Sora视频助手启动完成！")
 
     def _load_window_icon(self):
-        """加载同文件夹下的ico文件作为窗口logo，处理文件不存在异常"""
+        """加载窗口logo（兼容打包/开发环境）"""
         if os.path.exists(ICON_FILE):
             try:
                 self.root.iconbitmap(ICON_FILE)
@@ -803,7 +822,7 @@ class SoraVideoGenerator:
         detail_window.transient(self.root)
         detail_window.grab_set()
 
-        # 尝试给详情窗口也加载logo
+        # 尝试给详情窗口也加载logo（兼容打包/开发环境）
         if os.path.exists(ICON_FILE):
             try:
                 detail_window.iconbitmap(ICON_FILE)
@@ -856,7 +875,7 @@ class SoraVideoGenerator:
         req_text.config(state=tk.DISABLED)
         resp_text.config(state=tk.DISABLED)
 
-        # 关闭按钮（修正笔误）
+        # 关闭按钮
         btn_frame = ttkb.Frame(detail_window)
         btn_frame.pack(fill=X, padx=10, pady=10)
         ttkb.Button(btn_frame, text="关闭窗口", command=detail_window.destroy, bootstyle="primary").pack(side=RIGHT)
@@ -1131,8 +1150,8 @@ if __name__ == "__main__":
         ("requests", "requests"),
         ("ttkbootstrap", "ttkbootstrap"),
         ("urllib3", "urllib3"),
-        ("markdown", "markdown"),  # 新增：检查markdown库
-        ("bs4", "bs4")  # 新增：检查BeautifulSoup库
+        ("markdown", "markdown"),
+        ("bs4", "bs4")
     ]
 
     for dep_name, import_name in required_deps:
@@ -1150,7 +1169,7 @@ if __name__ == "__main__":
 
     # 启动程序
     root = ttkb.Window(themename="cosmo")
-    # 入口处也设置最大化（双重保障）
+    # 双重保障：入口处也设置最大化
     root.state('zoomed')
     app = SoraVideoGenerator(root)
     root.protocol("WM_DELETE_WINDOW", lambda: app.stop_monitor() or root.destroy())
