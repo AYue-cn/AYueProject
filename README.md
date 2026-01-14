@@ -15,7 +15,7 @@
 ## 🚀 怎么用？
 1. 先把仓库克隆到本地：
    ```bash
-   git clone https://github.com/AYue-cn/[你的仓库名].git  # 替换成你的仓库实际地址
+   git clone https://github.com/AYue-cn/AYueProject.git  # 替换成你的仓库实际地址
    cd [你的仓库名]
    ```
 2. 安装依赖（如果工具需要的话）：
