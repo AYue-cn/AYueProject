@@ -109,7 +109,7 @@ def parse_markdown_text_to_plain(md_text: str) -> str:
         # 解析并渲染为纯文本
         text = md.render(md_text)
         # 3. 清理多余的空行（保留单个空行）
-        plain_text =  "\n".join([line.strip() for line in text.split("\n") if line.strip()])
+        plain_text = "\n".join([line.strip() for line in text.split("\n") if line.strip()])
 
         return plain_text
 
@@ -117,34 +117,6 @@ def parse_markdown_text_to_plain(md_text: str) -> str:
         print(f"Markdown解析失败：{str(e)}")
         # 解析失败时返回原始文本（避免内容丢失）
         return md_text.strip()
-
-
-def read_md_file(file_path: str) -> tuple[str, str]:
-    """
-    读取Markdown文件，返回解析后的HTML和纯文本
-    :param file_path: md文件路径
-    :return: html_str(HTML字符串), plain_text(纯文本字符串)
-    """
-    try:
-        # 1. 读取md文件内容
-        with open(file_path, 'r', encoding='utf-8') as f:
-            md_content = f.read()
-
-        # 2. 将Markdown解析为HTML
-        html_str = markdown.markdown(md_content)
-
-        # 3. 从HTML中提取纯文本（去除所有标签）
-        soup = BeautifulSoup(html_str, 'html.parser')
-        plain_text = soup.get_text(strip=True, separator='\n')
-
-        return html_str, plain_text
-
-    except FileNotFoundError:
-        print(f"错误：未找到文件 {file_path}")
-        return "", ""
-    except Exception as e:
-        print(f"读取失败：{str(e)}")
-        return "", ""
 
 
 # ==================== 辅助函数：Base64判断与简写 ====================
@@ -491,7 +463,7 @@ class SoraVideoGenerator:
             messagebox.showinfo("提示", "主体提示词为空，无需解析")
             return
 
-        # 调用基于markdown+bs4的解析函数
+        # 调用基于markdown-it-py + mdit_plain的解析函数
         parsed_text = parse_markdown_text_to_plain(original_text)
 
         # 替换主体提示词内容
@@ -1144,9 +1116,7 @@ if __name__ == "__main__":
     required_deps = [
         ("requests", "requests"),
         ("ttkbootstrap", "ttkbootstrap"),
-        ("urllib3", "urllib3"),
-        ("markdown", "markdown"),
-        ("bs4", "bs4")
+        ("urllib3", "urllib3")
     ]
 
     for dep_name, import_name in required_deps:
