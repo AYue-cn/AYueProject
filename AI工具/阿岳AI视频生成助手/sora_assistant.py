@@ -271,7 +271,10 @@ class SoraVideoGenerator:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_NAME)
-        self.root.geometry("1920x1000")
+        # 替换固定尺寸为最大化窗口（保留窗口边框，推荐）
+        self.root.state('zoomed')
+        # 可选：如果想要全屏（无窗口边框），用这行替代上面的state：
+        # self.root.attributes('-fullscreen', True)
         self.root.resizable(True, True)
 
         # 第一步：先初始化核心属性（避免属性不存在）
@@ -1147,6 +1150,8 @@ if __name__ == "__main__":
 
     # 启动程序
     root = ttkb.Window(themename="cosmo")
+    # 入口处也设置最大化（双重保障）
+    root.state('zoomed')
     app = SoraVideoGenerator(root)
     root.protocol("WM_DELETE_WINDOW", lambda: app.stop_monitor() or root.destroy())
     root.mainloop()
