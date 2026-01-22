@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import sys
+import subprocess
 
 # ===================== 全局配置（仅保留聊天相关） =====================
 # 基础配置
