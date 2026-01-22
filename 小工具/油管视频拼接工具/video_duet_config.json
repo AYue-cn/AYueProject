@@ -1,0 +1,10 @@
+{
+  "folder_a": "C:\\Users\\Administrator\\PyCharmMiscProject\\小工具\\油管视频拼接工具\\A",
+  "folder_b": "C:\\Users\\Administrator\\PyCharmMiscProject\\小工具\\油管视频拼接工具\\B",
+  "output_folder": "C:/Users/Administrator/PyCharmMiscProject/小工具/油管视频拼接工具/O",
+  "num_generate": "3",
+  "mode": "1vN模式",
+  "audio_source": "A 的音频",
+  "duration_source": "A 的时长",
+  "overlap_pixels": 150
+}
