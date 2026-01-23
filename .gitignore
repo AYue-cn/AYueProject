@@ -17,3 +17,92 @@ __pycache__/   # 忽略Python编译缓存文件夹
 *.ico          # 忽略所有图标文件（如果你不需要追踪ico）
 *.exe          # 忽略所有exe可执行文件
 *.iml
+
+# ========================== PyCharm 专属忽略 ==========================
+# PyCharm 项目配置文件夹（核心忽略项，包含运行配置、缓存、索引等）
+.idea/
+# PyCharm 旧版本模块文件（部分老项目可能存在）
+*.iml
+*.iws
+*.ipr
+# PyCharm 调试/运行临时文件
+run/
+logs/
+__pycache__/
+# PyCharm 代码格式化缓存
+.idea/codeStyles/
+.idea/dictionaries/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+.idea/inspectionProfiles/
+
+# ========================== Python 通用忽略 ==========================
+# 编译后的字节码文件
+*.py[cod]
+*$py.class
+# Python 缓存文件夹（跨平台通用）
+__pycache__/
+# 虚拟环境（覆盖常见命名：venv、env、.env 等）
+venv/
+env/
+ENV/
+.env/
+.venv/
+# 依赖包缓存/下载目录
+.pip/
+.wheelhouse/
+# 日志文件
+*.log
+*.logs
+# 临时文件
+*.tmp
+*~
+# 环境变量配置文件（敏感信息，切勿提交）
+.env
+.env.local
+.env.development
+.env.production
+# 数据库文件（如 SQLite）
+*.db
+*.sqlite
+*.sqlite3
+# Jupyter Notebook 检查点（之前项目涉及 Jupyter，重点忽略）
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+# Python 测试/覆盖率报告
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+nosetests.xml
+pytest.xml
+# 打包产物
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+
+# ========================== 系统/通用忽略 ==========================
+# Windows 系统文件
+Thumbs.db
+Desktop.ini
+# macOS 系统文件
+.DS_Store
+# Linux 临时文件
+*.swp
+# 编辑器通用备份文件
+*.bak
+*.sublime-*
+# VS Code 配置（若混用编辑器可保留）
+.vscode/
+*.code-workspace
+# 压缩包/归档文件
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z

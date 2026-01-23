@@ -56,7 +56,7 @@ def get_resource_path(relative_path):
 
 
 # ==================== 配置常量 ====================
-APP_NAME = "Sora视频助手4.1"
+APP_NAME = "Sora视频助手4.2"
 ICON_FILE = get_resource_path("4odpx-r40oi-001.ico")  # 兼容打包/开发环境的ICO路径
 API_FILE_PATH = "api.txt"
 CONFIG_FILE = "config.json"
@@ -433,8 +433,28 @@ class SoraVideoGenerator:
         ttkb.Label(right, text="参考图：").pack(anchor=W)
         f_ref = ttkb.Frame(right)
         f_ref.pack(fill=X, pady=5)
-        ttkb.Entry(f_ref, textvariable=self.ref_image_path, width=35).pack(side=LEFT, fill=X, expand=True, padx=(0, 10))
-        ttkb.Button(f_ref, text="选择图片", command=self.select_reference_image, bootstyle="info").pack(side=LEFT)
+
+        # 输入框占大部分空间
+        ttkb.Entry(f_ref, textvariable=self.ref_image_path, width=35).pack(side=LEFT, fill=X, expand=True, padx=(0, 8))
+
+        # 选择图片按钮
+        ttkb.Button(
+            f_ref,
+            text="选择图片",
+            command=self.select_reference_image,
+            bootstyle="info",
+            width=10
+        ).pack(side=LEFT, padx=(0, 4))
+
+        # 新增：小型清空按钮（灰色、紧凑）
+        ttkb.Button(
+            f_ref,
+            text="×",
+            command=lambda: self.ref_image_path.set(""),
+            bootstyle="secondary-outline",
+            width=2,  # 非常窄
+            padding=(4, 0)  # 缩小内边距
+        ).pack(side=LEFT)
 
         # 下载路径
         ttkb.Label(right, text="下载路径：").pack(anchor=W, pady=(10, 0))
