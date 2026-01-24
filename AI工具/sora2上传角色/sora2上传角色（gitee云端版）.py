@@ -63,7 +63,7 @@ class ViewCharactersWindow(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("已保存的角色列表")
-        self.geometry("1200x650")
+        self.geometry("1080x650")
         self.transient(parent)
         self.grab_set()
 
