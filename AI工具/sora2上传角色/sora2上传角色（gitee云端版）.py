@@ -25,7 +25,9 @@ TEMP_VIDEO_PATH = "temp_static_video.mp4"
 
 DEFAULT_CONFIG = {
     "api_key": "",
-    "host": "https://grsai.dakka.com.cn"
+    "host": "https://grsai.dakka.com.cn",
+    "poll_interval": 5,
+    "poll_max_attempts": 65
 }
 
 UPLOAD_ENDPOINT = "/v1/video/sora-upload-character"
@@ -142,7 +144,7 @@ class SoraCharacterUploader(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("阿岳Sora2角色上传工具v4.0")
-        self.geometry("900x750")
+        self.geometry("900x800")
         self.resizable(False, False)
 
         self.cache_dir = "cache"
@@ -151,6 +153,8 @@ class SoraCharacterUploader(ctk.CTk):
         self.config = load_config()
         self.api_key = self.config.get("api_key", "")
         self.host = self.config.get("host", DEFAULT_CONFIG["host"])
+        self.poll_interval = int(self.config.get("poll_interval", DEFAULT_CONFIG["poll_interval"]))
+        self.poll_max_attempts = int(self.config.get("poll_max_attempts", DEFAULT_CONFIG["poll_max_attempts"]))
 
         self.file_path = ""
         self.task_running = False
@@ -260,7 +264,7 @@ class SoraCharacterUploader(ctk.CTk):
                 merged[key] = item
 
         merged_list = list(merged.values())
-        merged_list.sort(key=lambda x: x.get("timestamp", ""))
+        merged_list.sort(key=lambda x: x.get("timestamp", "") or "")
 
         self.log(
             f"合并完成：总角色数 {len(merged_list)}（云端 {len(cloud_data)} + 本地 {len(local_backup)} - 重复 {len(cloud_data) + len(local_backup) - len(merged_list)}）")
@@ -273,6 +277,7 @@ class SoraCharacterUploader(ctk.CTk):
         }
 
     def create_widgets(self):
+        # 配置区域
         config_frame = ctk.CTkFrame(self)
         config_frame.pack(padx=20, pady=(15, 5), fill="x")
 
@@ -284,14 +289,32 @@ class SoraCharacterUploader(ctk.CTk):
         ctk.CTkButton(config_frame, text="保存配置", width=120,
                       command=self.save_api_config).pack(side="right", padx=10)
 
+        # Host
         host_frame = ctk.CTkFrame(self)
-        host_frame.pack(padx=20, pady=(0, 10), fill="x")
+        host_frame.pack(padx=20, pady=(0, 5), fill="x")
 
         ctk.CTkLabel(host_frame, text="API Host:", font=("Segoe UI", 14)).pack(side="left", padx=(10, 5))
         self.host_entry = ctk.CTkEntry(host_frame, width=380)
         self.host_entry.insert(0, self.host)
         self.host_entry.pack(side="left", padx=5, fill="x", expand=True)
 
+        # 轮询设置
+        poll_frame = ctk.CTkFrame(self)
+        poll_frame.pack(padx=20, pady=5, fill="x")
+
+        ctk.CTkLabel(poll_frame, text="轮询间隔（秒）：", font=("Segoe UI", 14)).pack(side="left", padx=(10, 5))
+        self.poll_interval_entry = ctk.CTkEntry(poll_frame, width=100)
+        self.poll_interval_entry.insert(0, str(self.poll_interval))
+        self.poll_interval_entry.pack(side="left", padx=5)
+
+        ctk.CTkLabel(poll_frame, text="最大轮询次数：", font=("Segoe UI", 14)).pack(side="left", padx=(20, 5))
+        self.poll_attempts_entry = ctk.CTkEntry(poll_frame, width=100)
+        self.poll_attempts_entry.insert(0, str(self.poll_max_attempts))
+        self.poll_attempts_entry.pack(side="left", padx=5)
+
+        ctk.CTkLabel(poll_frame, text="(建议间隔3-10秒，次数30-120)", text_color="gray").pack(side="left", padx=10)
+
+        # 文件选择
         file_frame = ctk.CTkFrame(self)
         file_frame.pack(padx=20, pady=10, fill="x")
 
@@ -301,17 +324,18 @@ class SoraCharacterUploader(ctk.CTk):
 
         ctk.CTkButton(file_frame, text="浏览...", width=100, command=self.select_file).pack(side="right", padx=10)
 
+        # 时间范围
         time_frame = ctk.CTkFrame(self)
-        time_frame.pack(padx=20, pady=10, fill="x")
+        time_frame.pack(padx=20, pady=5, fill="x")
 
         ctk.CTkLabel(time_frame, text="截取时间范围（秒）：", font=("Segoe UI", 14)).pack(side="left", padx=(10, 5))
         self.timestamps_entry = ctk.CTkEntry(time_frame, placeholder_text="例如: 0,3", width=180)
         self.timestamps_entry.insert(0, "0,3")
         self.timestamps_entry.pack(side="left", padx=5)
 
-        ctk.CTkLabel(time_frame, text="(最多3秒，图片自动转为4秒30fps+空白音轨)", text_color="gray").pack(side="left",
-                                                                                                         padx=5)
+        ctk.CTkLabel(time_frame, text="(最多3秒，图片自动转为4秒30fps+空白音轨)", text_color="gray").pack(side="left", padx=5)
 
+        # 按钮区域
         btn_frame = ctk.CTkFrame(self)
         btn_frame.pack(padx=20, pady=15, fill="x")
 
@@ -338,6 +362,7 @@ class SoraCharacterUploader(ctk.CTk):
         )
         self.upload_cloud_btn.pack(side="left", padx=10)
 
+        # 日志区域
         log_frame = ctk.CTkFrame(self)
         log_frame.pack(padx=20, pady=(10, 20), fill="both", expand=True)
 
@@ -350,22 +375,40 @@ class SoraCharacterUploader(ctk.CTk):
     def save_api_config(self):
         new_key = self.api_key_entry.get().strip()
         new_host = self.host_entry.get().strip()
+        interval_str = self.poll_interval_entry.get().strip()
+        attempts_str = self.poll_attempts_entry.get().strip()
 
         if not new_key:
             messagebox.showwarning("提示", "API Key 不能为空")
             return
 
-        if not new_host:
-            new_host = DEFAULT_CONFIG["host"]
+        try:
+            new_interval = int(interval_str) if interval_str else DEFAULT_CONFIG["poll_interval"]
+            new_interval = max(1, new_interval)
+        except:
+            new_interval = DEFAULT_CONFIG["poll_interval"]
+
+        try:
+            new_attempts = int(attempts_str) if attempts_str else DEFAULT_CONFIG["poll_max_attempts"]
+            new_attempts = max(1, new_attempts)
+        except:
+            new_attempts = DEFAULT_CONFIG["poll_max_attempts"]
 
         self.api_key = new_key
-        self.host = new_host
-        self.config["api_key"] = new_key
-        self.config["host"] = new_host
+        self.host = new_host or DEFAULT_CONFIG["host"]
+        self.poll_interval = new_interval
+        self.poll_max_attempts = new_attempts
+
+        self.config.update({
+            "api_key": new_key,
+            "host": self.host,
+            "poll_interval": new_interval,
+            "poll_max_attempts": new_attempts
+        })
         save_config(self.config)
 
-        self.log("API 配置已保存")
-        messagebox.showinfo("成功", "API Key 和 Host 已更新")
+        self.log(f"配置已保存 | 轮询：{new_interval}秒 × {new_attempts}次")
+        messagebox.showinfo("成功", "配置已更新")
 
     def log(self, message, error=False):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -584,7 +627,13 @@ class SoraCharacterUploader(ctk.CTk):
 
     def poll_for_result(self, task_id):
         payload = {"id": task_id}
-        max_attempts = 120
+        interval = self.poll_interval
+        max_attempts = self.poll_max_attempts
+
+        total_sec = interval * max_attempts
+        min_part = total_sec // 60
+        sec_part = total_sec % 60
+        timeout_str = f"{min_part}分{sec_part}秒" if min_part > 0 else f"{sec_part}秒"
 
         for i in range(max_attempts):
             try:
@@ -597,10 +646,11 @@ class SoraCharacterUploader(ctk.CTk):
                         raise Exception("任务不存在（可能已超时）")
                     raise Exception(data.get("msg", "未知API错误"))
 
-                result_data = data["data"]
+                result_data = data.get("data", {})
                 status = result_data.get("status", "unknown")
 
-                self.log(f"[{i + 1}] 状态：{status}  进度：{result_data.get('progress', '?')}%")
+                progress = result_data.get("progress", "?")
+                self.log(f"[{i+1:02d}/{max_attempts:02d}] 状态：{status}  进度：{progress}%")
 
                 if status == "succeeded":
                     results = result_data.get("results", [])
@@ -610,17 +660,21 @@ class SoraCharacterUploader(ctk.CTk):
                         raise Exception("成功但未找到 character_id")
 
                 elif status == "failed":
-                    reason = result_data.get("failure_reason", "未知")
-                    err = result_data.get("error", "")
-                    raise Exception(f"生成失败 - {reason} {err}")
+                    error_msg = result_data.get("error", "").strip()
+                    reason = result_data.get("failure_reason", "未知").strip()
 
-                time.sleep(5)
+                    display = error_msg or (reason if reason.lower() != "error" else "无详细错误信息")
+                    full_err = f"生成失败 - {display}"
+                    self.log(full_err, error=True)
+                    raise Exception(full_err)
+
+                time.sleep(interval)
 
             except Exception as e:
-                self.log(f"轮询异常（第{i + 1}次）：{str(e)}", error=True)
-                time.sleep(5)
+                self.log(f"轮询异常（第{i+1}次）：{str(e)}", error=True)
+                time.sleep(interval)
 
-        raise Exception("任务超时（10分钟未完成）")
+        raise Exception(f"任务超时（超过{timeout_str}未完成） - Task ID: {task_id}")
 
     def open_view_window(self):
         ViewCharactersWindow(self)
@@ -640,34 +694,29 @@ class SoraCharacterUploader(ctk.CTk):
         try:
             self.log("=== 开始云端同步（合并模式） ===")
 
-            backup_success = self._backup_local_characters()
-            if not backup_success:
-                self.log("备份本地失败，但仍继续同步（风险自担）", error=True)
+            self._backup_local_characters()
 
             self.log("正在下载云端最新角色数据和缩略图...")
             self.downloader.download_folder(self.remote_folder, self.local_save_path)
 
             self.log("正在合并本地备份与云端数据...")
-            merged_characters = self._merge_characters()
+            merged = self._merge_characters()
 
             with open(STORAGE_FILE, "w", encoding="utf-8") as f:
-                json.dump(merged_characters, f, ensure_ascii=False, indent=2)
+                json.dump(merged, f, ensure_ascii=False, indent=2)
 
-            self.characters = merged_characters
+            self.characters = merged
 
             self.log(f"云端同步合并完成！当前总角色数量：{len(self.characters)}")
-            messagebox.showinfo("同步成功",
-                               f"已从云端合并角色数据\n"
-                               f"当前本地总记录：{len(self.characters)} 条\n"
-                               f"（已自动去重，保留所有唯一 character_id）")
+            messagebox.showinfo("同步成功", f"已合并角色数据\n当前本地总记录：{len(self.characters)} 条")
 
         except Exception as e:
             self.log(f"同步过程中发生错误：{str(e)}", error=True)
-            messagebox.showerror("同步失败", f"同步失败：\n{str(e)}")
+            messagebox.showerror("同步失败", str(e))
 
         finally:
             self.task_running = False
-            self.after(0, lambda: self.download_btn.configure(state="normal", text="同步云端（合并）"))
+            self.after(0, lambda: self.download_btn.configure(state="normal", text="下载云端角色（合并）"))
             self.after(0, lambda: self.status_label.configure(text="就绪", text_color="gray"))
 
     def start_upload_cloud_thread(self):
@@ -690,12 +739,12 @@ class SoraCharacterUploader(ctk.CTk):
             self.downloader.download_folder(self.remote_folder, self.local_save_path)
 
             self.log("正在合并本地备份与云端数据...")
-            merged_characters = self._merge_characters()
+            merged = self._merge_characters()
 
             with open(STORAGE_FILE, "w", encoding="utf-8") as f:
-                json.dump(merged_characters, f, ensure_ascii=False, indent=2)
+                json.dump(merged, f, ensure_ascii=False, indent=2)
 
-            self.characters = merged_characters
+            self.characters = merged
             self.log(f"合并后的角色已保存到本地，当前总角色数：{len(self.characters)}")
 
             self.log("=== 开始上传合并后的 cache 文件夹到 Gitee ===")
@@ -818,17 +867,14 @@ class GiteeFolderDownloader:
         return files
 
     def download_folder(self, remote_folder: str, local_save_path: str):
-        self.log(
-            f"正在获取 Gitee 仓库 {self.repo_owner}/{self.repo_name} 分支 {self.branch} 的文件夹 {remote_folder}...")
+        self.log(f"正在获取 Gitee 仓库 {self.repo_owner}/{self.repo_name} 分支 {self.branch} 的文件夹 {remote_folder}...")
 
         all_files = self._list_files_recursive(remote_folder)
         if not all_files:
             self.log("未找到任何文件（路径/分支错误或权限不足）", error=True)
             return
 
-        target_files = [f for f in all_files if
-                        f["remote_path"].startswith(remote_folder + "/") or f["remote_path"] == remote_folder.rstrip(
-                            "/")]
+        target_files = [f for f in all_files if f["remote_path"].startswith(remote_folder + "/") or f["remote_path"] == remote_folder.rstrip("/")]
         cache = self._load_cache()
 
         self.log(f"共找到 {len(target_files)} 个文件，开始检查更新...")
@@ -894,15 +940,8 @@ class GiteeFolderDownloader:
             return None
 
     def _upload_image_post(self, local_path: str, remote_path: str) -> bool:
-        start_time = time.time()
-        timeout_sec = 120  # 2分钟超时
-
         try:
             local_content = self._read_local_file(local_path)
-            if not local_content:
-                self.log(f"[上传跳过] 文件内容为空：{os.path.basename(remote_path)}", error=True)
-                return False
-
             content_b64 = base64.b64encode(local_content).decode("utf-8")
 
             form_data = {
@@ -913,62 +952,34 @@ class GiteeFolderDownloader:
             }
 
             upload_url = f"{self.base_api}/{remote_path}"
-
-            self.log(f"[开始POST] {os.path.basename(remote_path)} → {upload_url}")
-
             resp = self.session.post(
                 url=upload_url,
                 data=form_data,
                 headers=self.headers,
-                timeout=timeout_sec
+                timeout=30
             )
 
-            elapsed = time.time() - start_time
+            resp.raise_for_status()
+            response_data = resp.json()
 
-            if resp.status_code not in (200, 201):
-                error_msg = resp.text[:300] if resp.text else "无响应内容"
-                self.log(f"[POST失败 {resp.status_code}] {os.path.basename(remote_path)} - {error_msg}", error=True)
-                return False
+            if "content" in response_data and "sha" in response_data.get("content", {}):
+                self.log(f"[POST成功] 缩略图：{os.path.basename(remote_path)}")
+                return True
+            else:
+                raise Exception("响应缺少content/sha字段")
 
-            try:
-                response_data = resp.json()
-            except:
-                self.log(f"[POST失败] 响应不是有效JSON：{os.path.basename(remote_path)}", error=True)
-                return False
-
-            if "content" not in response_data or "sha" not in response_data.get("content", {}):
-                self.log(f"[POST失败] 响应缺少 content 或 sha 字段：{os.path.basename(remote_path)}", error=True)
-                return False
-
-            self.log(
-                f"[POST成功] {os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}... "
-                f"(耗时 {elapsed:.1f}秒)"
-            )
-            return True
-
-        except requests.exceptions.Timeout:
-            self.log(f"[POST超时 {timeout_sec}s] {os.path.basename(remote_path)}", error=True)
-            return False
         except Exception as e:
-            elapsed = time.time() - start_time
-            self.log(f"[POST异常] {os.path.basename(remote_path)} - {str(e)} (耗时 {elapsed:.1f}秒)", error=True)
+            self.log(f"[POST失败] 缩略图：{os.path.basename(remote_path)} - {str(e)}", error=True)
             return False
 
     def _upload_json_put(self, local_path: str, remote_path: str) -> bool:
-        start_time = time.time()
-        timeout_sec = 180  # 3分钟超时
-
         try:
             remote_info = self._get_remote_file_info(remote_path)
             if remote_info is None:
-                self.log(f"[PUT失败] 获取远程信息异常：{os.path.basename(remote_path)}", error=True)
+                self.log(f"[PUT失败] JSON文件：{os.path.basename(remote_path)} - 获取远程信息异常", error=True)
                 return False
 
             local_content = self._read_local_file(local_path)
-            if not local_content:
-                self.log(f"[上传跳过] 文件内容为空：{os.path.basename(remote_path)}", error=True)
-                return False
-
             content_b64 = base64.b64encode(local_content).decode("utf-8")
 
             payload = {
@@ -981,45 +992,24 @@ class GiteeFolderDownloader:
                 payload["sha"] = remote_info["sha"]
 
             upload_url = f"{self.base_api}/{remote_path}"
-
-            self.log(f"[开始PUT] {os.path.basename(remote_path)} → {upload_url}")
-
             resp = self.session.put(
                 url=upload_url,
                 json=payload,
                 headers=self.put_headers,
-                timeout=timeout_sec
+                timeout=30
             )
 
-            elapsed = time.time() - start_time
+            resp.raise_for_status()
+            response_data = resp.json()
 
-            if resp.status_code not in (200, 201):
-                error_msg = resp.text[:300] if resp.text else "无响应内容"
-                self.log(f"[PUT失败 {resp.status_code}] {os.path.basename(remote_path)} - {error_msg}", error=True)
-                return False
+            if "content" in response_data and "sha" in response_data.get("content", {}):
+                self.log(f"[PUT成功] JSON文件：{os.path.basename(remote_path)}")
+                return True
+            else:
+                raise Exception("响应缺少content/sha字段")
 
-            try:
-                response_data = resp.json()
-            except:
-                self.log(f"[PUT失败] 响应不是有效JSON：{os.path.basename(remote_path)}", error=True)
-                return False
-
-            if "content" not in response_data or "sha" not in response_data.get("content", {}):
-                self.log(f"[PUT失败] 响应缺少 content 或 sha 字段：{os.path.basename(remote_path)}", error=True)
-                return False
-
-            self.log(
-                f"[PUT成功] {os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}... "
-                f"(耗时 {elapsed:.1f}秒)"
-            )
-            return True
-
-        except requests.exceptions.Timeout:
-            self.log(f"[PUT超时 {timeout_sec}s] {os.path.basename(remote_path)}", error=True)
-            return False
         except Exception as e:
-            elapsed = time.time() - start_time
-            self.log(f"[PUT异常] {os.path.basename(remote_path)} - {str(e)} (耗时 {elapsed:.1f}秒)", error=True)
+            self.log(f"[PUT失败] JSON文件：{os.path.basename(remote_path)} - {str(e)}", error=True)
             return False
 
     def upload_folder(self, local_folder: str, remote_folder: str):
@@ -1036,13 +1026,7 @@ class GiteeFolderDownloader:
                 rel_path = os.path.relpath(local_path, local_folder).replace("\\", "/")
                 remote_path = f"{remote_folder}/{rel_path}".rstrip("/")
 
-                file_type = ""
-                if file_ext in image_ext:
-                    file_type = "image"
-                elif file_ext in json_ext:
-                    file_type = "json"
-                else:
-                    file_type = "other"
+                file_type = "image" if file_ext in image_ext else "json" if file_ext in json_ext else "other"
 
                 local_files.append({
                     "local_path": local_path,
@@ -1055,33 +1039,26 @@ class GiteeFolderDownloader:
             self.log("本地文件夹为空，无需上传")
             return
 
-        self.log(
-            f"共找到 {len(local_files)} 个文件（图片：{len([f for f in local_files if f['file_type'] == 'image'])}，JSON：{len([f for f in local_files if f['file_type'] == 'json'])}，其他：{len([f for f in local_files if f['file_type'] == 'other'])}）")
-
-        success_count = 0
-        fail_count = 0
-        timeout_count = 0
-        skip_count = 0
+        success = fail = skip = 0
 
         for item in local_files:
             if item["file_type"] == "image":
-                success = self._upload_image_post(item["local_path"], item["remote_path"])
+                if self._upload_image_post(item["local_path"], item["remote_path"]):
+                    success += 1
+                else:
+                    fail += 1
             elif item["file_type"] == "json":
-                success = self._upload_json_put(item["local_path"], item["remote_path"])
+                if self._upload_json_put(item["local_path"], item["remote_path"]):
+                    success += 1
+                else:
+                    fail += 1
             else:
+                skip += 1
                 self.log(f"[跳过] 不支持的文件类型：{item['filename']}")
-                skip_count += 1
-                continue
 
-            if success:
-                success_count += 1
-            else:
-                fail_count += 1
-                # 这里可以选择是否额外统计超时，但由于 log 已区分，此处简单累加 fail_count
-
-        self.log(f"\n上传结果汇总：成功：{success_count}，失败：{fail_count}，跳过：{skip_count}")
-        if fail_count > 0:
-            self.log(f"⚠️  有 {fail_count} 个文件上传失败，请检查日志", error=True)
+        self.log(f"\n上传结果：成功 {success}，失败 {fail}，跳过 {skip}")
+        if fail > 0:
+            self.log(f"⚠️ 有 {fail} 个文件上传失败，请检查日志", error=True)
 
     def _read_local_file(self, path: str) -> bytes:
         try:
