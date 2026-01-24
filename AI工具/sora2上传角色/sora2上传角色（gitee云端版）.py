@@ -894,8 +894,15 @@ class GiteeFolderDownloader:
             return None
 
     def _upload_image_post(self, local_path: str, remote_path: str) -> bool:
+        start_time = time.time()
+        timeout_sec = 120  # 2分钟超时
+
         try:
             local_content = self._read_local_file(local_path)
+            if not local_content:
+                self.log(f"[上传跳过] 文件内容为空：{os.path.basename(remote_path)}", error=True)
+                return False
+
             content_b64 = base64.b64encode(local_content).decode("utf-8")
 
             form_data = {
@@ -906,35 +913,62 @@ class GiteeFolderDownloader:
             }
 
             upload_url = f"{self.base_api}/{remote_path}"
+
+            self.log(f"[开始POST] {os.path.basename(remote_path)} → {upload_url}")
+
             resp = self.session.post(
                 url=upload_url,
                 data=form_data,
                 headers=self.headers,
-                timeout=30
+                timeout=timeout_sec
             )
 
-            resp.raise_for_status()
-            response_data = resp.json()
+            elapsed = time.time() - start_time
 
-            if "content" in response_data and "sha" in response_data.get("content", {}):
-                self.log(
-                    f"[POST成功] 缩略图：{os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}...")
-                return True
-            else:
-                raise Exception("响应缺少content/sha字段")
+            if resp.status_code not in (200, 201):
+                error_msg = resp.text[:300] if resp.text else "无响应内容"
+                self.log(f"[POST失败 {resp.status_code}] {os.path.basename(remote_path)} - {error_msg}", error=True)
+                return False
 
+            try:
+                response_data = resp.json()
+            except:
+                self.log(f"[POST失败] 响应不是有效JSON：{os.path.basename(remote_path)}", error=True)
+                return False
+
+            if "content" not in response_data or "sha" not in response_data.get("content", {}):
+                self.log(f"[POST失败] 响应缺少 content 或 sha 字段：{os.path.basename(remote_path)}", error=True)
+                return False
+
+            self.log(
+                f"[POST成功] {os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}... "
+                f"(耗时 {elapsed:.1f}秒)"
+            )
+            return True
+
+        except requests.exceptions.Timeout:
+            self.log(f"[POST超时 {timeout_sec}s] {os.path.basename(remote_path)}", error=True)
+            return False
         except Exception as e:
-            self.log(f"[POST失败] 缩略图：{os.path.basename(remote_path)} - {str(e)}", error=True)
+            elapsed = time.time() - start_time
+            self.log(f"[POST异常] {os.path.basename(remote_path)} - {str(e)} (耗时 {elapsed:.1f}秒)", error=True)
             return False
 
     def _upload_json_put(self, local_path: str, remote_path: str) -> bool:
+        start_time = time.time()
+        timeout_sec = 180  # 3分钟超时
+
         try:
             remote_info = self._get_remote_file_info(remote_path)
             if remote_info is None:
-                self.log(f"[PUT失败] JSON文件：{os.path.basename(remote_path)} - 获取远程信息异常", error=True)
+                self.log(f"[PUT失败] 获取远程信息异常：{os.path.basename(remote_path)}", error=True)
                 return False
 
             local_content = self._read_local_file(local_path)
+            if not local_content:
+                self.log(f"[上传跳过] 文件内容为空：{os.path.basename(remote_path)}", error=True)
+                return False
+
             content_b64 = base64.b64encode(local_content).decode("utf-8")
 
             payload = {
@@ -945,31 +979,47 @@ class GiteeFolderDownloader:
 
             if remote_info["exists"]:
                 payload["sha"] = remote_info["sha"]
-                self.log(
-                    f"[PUT准备] JSON文件：{os.path.basename(remote_path)} - 远程存在，使用SHA: {remote_info['sha'][:8]}...")
-            else:
-                self.log(f"[PUT准备] JSON文件：{os.path.basename(remote_path)} - 远程不存在，新建模式")
 
             upload_url = f"{self.base_api}/{remote_path}"
+
+            self.log(f"[开始PUT] {os.path.basename(remote_path)} → {upload_url}")
+
             resp = self.session.put(
                 url=upload_url,
                 json=payload,
                 headers=self.put_headers,
-                timeout=30
+                timeout=timeout_sec
             )
 
-            resp.raise_for_status()
-            response_data = resp.json()
+            elapsed = time.time() - start_time
 
-            if "content" in response_data and "sha" in response_data.get("content", {}):
-                self.log(
-                    f"[PUT成功] JSON文件：{os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}...")
-                return True
-            else:
-                raise Exception("响应缺少content/sha字段")
+            if resp.status_code not in (200, 201):
+                error_msg = resp.text[:300] if resp.text else "无响应内容"
+                self.log(f"[PUT失败 {resp.status_code}] {os.path.basename(remote_path)} - {error_msg}", error=True)
+                return False
 
+            try:
+                response_data = resp.json()
+            except:
+                self.log(f"[PUT失败] 响应不是有效JSON：{os.path.basename(remote_path)}", error=True)
+                return False
+
+            if "content" not in response_data or "sha" not in response_data.get("content", {}):
+                self.log(f"[PUT失败] 响应缺少 content 或 sha 字段：{os.path.basename(remote_path)}", error=True)
+                return False
+
+            self.log(
+                f"[PUT成功] {os.path.basename(remote_path)} → SHA: {response_data['content']['sha'][:8]}... "
+                f"(耗时 {elapsed:.1f}秒)"
+            )
+            return True
+
+        except requests.exceptions.Timeout:
+            self.log(f"[PUT超时 {timeout_sec}s] {os.path.basename(remote_path)}", error=True)
+            return False
         except Exception as e:
-            self.log(f"[PUT失败] JSON文件：{os.path.basename(remote_path)} - {str(e)}", error=True)
+            elapsed = time.time() - start_time
+            self.log(f"[PUT异常] {os.path.basename(remote_path)} - {str(e)} (耗时 {elapsed:.1f}秒)", error=True)
             return False
 
     def upload_folder(self, local_folder: str, remote_folder: str):
@@ -1010,22 +1060,24 @@ class GiteeFolderDownloader:
 
         success_count = 0
         fail_count = 0
+        timeout_count = 0
         skip_count = 0
 
         for item in local_files:
             if item["file_type"] == "image":
-                if self._upload_image_post(item["local_path"], item["remote_path"]):
-                    success_count += 1
-                else:
-                    fail_count += 1
+                success = self._upload_image_post(item["local_path"], item["remote_path"])
             elif item["file_type"] == "json":
-                if self._upload_json_put(item["local_path"], item["remote_path"]):
-                    success_count += 1
-                else:
-                    fail_count += 1
+                success = self._upload_json_put(item["local_path"], item["remote_path"])
             else:
                 self.log(f"[跳过] 不支持的文件类型：{item['filename']}")
                 skip_count += 1
+                continue
+
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                # 这里可以选择是否额外统计超时，但由于 log 已区分，此处简单累加 fail_count
 
         self.log(f"\n上传结果汇总：成功：{success_count}，失败：{fail_count}，跳过：{skip_count}")
         if fail_count > 0:
