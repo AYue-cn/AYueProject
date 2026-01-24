@@ -26,8 +26,8 @@ TEMP_VIDEO_PATH = "temp_static_video.mp4"
 DEFAULT_CONFIG = {
     "api_key": "",
     "host": "https://grsai.dakka.com.cn",
-    "poll_interval": 5,
-    "poll_max_attempts": 65
+    "poll_interval": 10,
+    "poll_max_attempts": 30
 }
 
 UPLOAD_ENDPOINT = "/v1/video/sora-upload-character"
@@ -277,7 +277,6 @@ class SoraCharacterUploader(ctk.CTk):
         }
 
     def create_widgets(self):
-        # 配置区域
         config_frame = ctk.CTkFrame(self)
         config_frame.pack(padx=20, pady=(15, 5), fill="x")
 
@@ -289,7 +288,6 @@ class SoraCharacterUploader(ctk.CTk):
         ctk.CTkButton(config_frame, text="保存配置", width=120,
                       command=self.save_api_config).pack(side="right", padx=10)
 
-        # Host
         host_frame = ctk.CTkFrame(self)
         host_frame.pack(padx=20, pady=(0, 5), fill="x")
 
@@ -298,7 +296,6 @@ class SoraCharacterUploader(ctk.CTk):
         self.host_entry.insert(0, self.host)
         self.host_entry.pack(side="left", padx=5, fill="x", expand=True)
 
-        # 轮询设置
         poll_frame = ctk.CTkFrame(self)
         poll_frame.pack(padx=20, pady=5, fill="x")
 
@@ -314,7 +311,6 @@ class SoraCharacterUploader(ctk.CTk):
 
         ctk.CTkLabel(poll_frame, text="(建议间隔3-10秒，次数30-120)", text_color="gray").pack(side="left", padx=10)
 
-        # 文件选择
         file_frame = ctk.CTkFrame(self)
         file_frame.pack(padx=20, pady=10, fill="x")
 
@@ -324,7 +320,6 @@ class SoraCharacterUploader(ctk.CTk):
 
         ctk.CTkButton(file_frame, text="浏览...", width=100, command=self.select_file).pack(side="right", padx=10)
 
-        # 时间范围
         time_frame = ctk.CTkFrame(self)
         time_frame.pack(padx=20, pady=5, fill="x")
 
@@ -333,9 +328,9 @@ class SoraCharacterUploader(ctk.CTk):
         self.timestamps_entry.insert(0, "0,3")
         self.timestamps_entry.pack(side="left", padx=5)
 
-        ctk.CTkLabel(time_frame, text="(最多3秒，图片自动转为4秒30fps+空白音轨)", text_color="gray").pack(side="left", padx=5)
+        ctk.CTkLabel(time_frame, text="(最多3秒，图片自动转为4秒30fps+空白音轨)", text_color="gray").pack(side="left",
+                                                                                                         padx=5)
 
-        # 按钮区域
         btn_frame = ctk.CTkFrame(self)
         btn_frame.pack(padx=20, pady=15, fill="x")
 
@@ -362,7 +357,6 @@ class SoraCharacterUploader(ctk.CTk):
         )
         self.upload_cloud_btn.pack(side="left", padx=10)
 
-        # 日志区域
         log_frame = ctk.CTkFrame(self)
         log_frame.pack(padx=20, pady=(10, 20), fill="both", expand=True)
 
@@ -517,10 +511,11 @@ class SoraCharacterUploader(ctk.CTk):
                 self.log(f"角色提取成功！{display_str}")
                 messagebox.showinfo("完成",
                                     f"角色已追加保存：\n{display_str}\n缩略图：{thumb_path or '无'}\n总记录数：{len(self.characters)}")
+            # else: 失败情况已在 poll_for_result 内部处理弹窗和日志
 
         except Exception as e:
             self.log(f"发生错误：{str(e)}", error=True)
-            messagebox.showerror("失败", str(e))
+            messagebox.showerror("处理失败", str(e))
 
         finally:
             self.task_running = False
@@ -639,42 +634,59 @@ class SoraCharacterUploader(ctk.CTk):
             try:
                 resp = requests.post(f"{self.host}{RESULT_ENDPOINT}", headers=self.get_headers(), json=payload,
                                      timeout=20)
+                resp.raise_for_status()
                 data = resp.json()
 
                 if data.get("code") != 0:
                     if data.get("code") == -22:
-                        raise Exception("任务不存在（可能已超时）")
-                    raise Exception(data.get("msg", "未知API错误"))
+                        self.log("任务不存在（可能已超时或被清理）", error=True)
+                        return None
+                    raise Exception(data.get("msg") or f"API错误 code: {data.get('code')}")
 
                 result_data = data.get("data", {})
                 status = result_data.get("status", "unknown")
-
                 progress = result_data.get("progress", "?")
-                self.log(f"[{i+1:02d}/{max_attempts:02d}] 状态：{status}  进度：{progress}%")
+
+                self.log(f"[{i + 1:02d}/{max_attempts:02d}] 状态：{status}  进度：{progress}%")
 
                 if status == "succeeded":
                     results = result_data.get("results", [])
-                    if results and "character_id" in results[0]:
-                        return results[0]["character_id"]
+                    if results and isinstance(results, list) and "character_id" in results[0]:
+                        cid = results[0]["character_id"]
+                        self.log(f"角色提取成功！Character ID: {cid}")
+                        return cid
                     else:
-                        raise Exception("成功但未找到 character_id")
+                        self.log("状态为 succeeded 但未找到 character_id", error=True)
+                        return None
 
                 elif status == "failed":
-                    error_msg = result_data.get("error", "").strip()
-                    reason = result_data.get("failure_reason", "未知").strip()
+                    error_text = result_data.get("error", "").strip()
+                    reason = result_data.get("failure_reason", "").strip().lower()
 
-                    display = error_msg or (reason if reason.lower() != "error" else "无详细错误信息")
-                    full_err = f"生成失败 - {display}"
-                    self.log(full_err, error=True)
-                    raise Exception(full_err)
+                    if reason == "error" and error_text:
+                        error_msg = f"上传失败 - {error_text}"
+                        self.log(error_msg, error=True)
+                        self.after(0, lambda msg=error_text: messagebox.showerror("上传失败", msg))
+                        return None  # 立即终止轮询
+
+                    # 其他 failed 情况
+                    display = error_text or reason or "未知失败原因"
+                    full_msg = f"生成失败 - {display}"
+                    self.log(full_msg, error=True)
+                    self.after(0, lambda msg=full_msg: messagebox.showerror("生成失败", msg))
+                    return None  # 同样终止
 
                 time.sleep(interval)
 
             except Exception as e:
-                self.log(f"轮询异常（第{i+1}次）：{str(e)}", error=True)
+                self.log(f"轮询异常（第{i + 1}次）：{str(e)}", error=True)
                 time.sleep(interval)
 
-        raise Exception(f"任务超时（超过{timeout_str}未完成） - Task ID: {task_id}")
+        # 超时
+        timeout_msg = f"任务超时（超过{timeout_str}未完成） - Task ID: {task_id}"
+        self.log(timeout_msg, error=True)
+        self.after(0, lambda: messagebox.showerror("任务超时", timeout_msg))
+        return None
 
     def open_view_window(self):
         ViewCharactersWindow(self)
@@ -867,14 +879,17 @@ class GiteeFolderDownloader:
         return files
 
     def download_folder(self, remote_folder: str, local_save_path: str):
-        self.log(f"正在获取 Gitee 仓库 {self.repo_owner}/{self.repo_name} 分支 {self.branch} 的文件夹 {remote_folder}...")
+        self.log(
+            f"正在获取 Gitee 仓库 {self.repo_owner}/{self.repo_name} 分支 {self.branch} 的文件夹 {remote_folder}...")
 
         all_files = self._list_files_recursive(remote_folder)
         if not all_files:
             self.log("未找到任何文件（路径/分支错误或权限不足）", error=True)
             return
 
-        target_files = [f for f in all_files if f["remote_path"].startswith(remote_folder + "/") or f["remote_path"] == remote_folder.rstrip("/")]
+        target_files = [f for f in all_files if
+                        f["remote_path"].startswith(remote_folder + "/") or f["remote_path"] == remote_folder.rstrip(
+                            "/")]
         cache = self._load_cache()
 
         self.log(f"共找到 {len(target_files)} 个文件，开始检查更新...")
