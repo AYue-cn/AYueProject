@@ -93,6 +93,7 @@ Thumbs.db
 Desktop.ini
 # macOS 系统文件
 .DS_Store
+*.onnx
 # Linux 临时文件
 *.swp
 # 编辑器通用备份文件

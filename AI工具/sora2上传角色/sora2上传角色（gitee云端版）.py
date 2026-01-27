@@ -143,7 +143,7 @@ class ViewCharactersWindow(ctk.CTkToplevel):
 class SoraCharacterUploader(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("阿岳Sora2角色上传工具v4.0")
+        self.title("阿岳Sora2角色上传工具v4.2")
         self.geometry("900x800")
         self.resizable(False, False)
 
