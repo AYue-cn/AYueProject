@@ -58,7 +58,7 @@ def get_resource_path(relative_path):
 # ==================== 配置常量 ====================
 APP_NAME = "Sora视频助手4.2"
 ICON_FILE = get_resource_path("../阿岳AI视频生成助手/4odpx-r40oi-001.ico")  # 兼容打包/开发环境的ICO路径
-API_FILE_PATH = "../阿岳veo视频生成助手/api.txt"
+API_FILE_PATH = "api.txt"
 CONFIG_FILE = "../阿岳AI视频生成助手/config.json"
 TASKS_CACHE_FILE = "../阿岳AI视频生成助手/tasks.json"
 DEFAULT_DOWNLOAD_DIR = "./sora_videos"
